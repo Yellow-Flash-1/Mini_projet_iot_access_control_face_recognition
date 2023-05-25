@@ -152,7 +152,7 @@ def get_attempts():
 if __name__ == '__main__':
     with open(ERROR_LOG, mode='a') as f:
         try:
-            app.run()
+            app.run(host='0.0.0.0', port=5000)
         except KeyboardInterrupt:
             print("Server stopped with CTRL+C")
         except Exception as e:

@@ -7,7 +7,20 @@ void main() {
   runApp(MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  String _websiteAddress = 'localhost'; // Replace with your website address
+
+  void updateWebsiteAddress(String newAddress) {
+    setState(() {
+      _websiteAddress = newAddress;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -15,12 +28,62 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: ImageListScreen(),
+      home: Builder(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: Text('Image Viewer'),
+          ),
+          drawer: Drawer(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                DrawerHeader(
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                  ),
+                  child: Text(
+                    'Menu',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: Icon(Icons.settings),
+                  title: Text('Settings'),
+                  onTap: () async {
+                    // Navigate to the settings page and get the updated website address
+                    final websiteAddress = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SettingsPage(
+                          currentAddress: _websiteAddress,
+                        ),
+                      ),
+                    );
+
+                    // Update the website address if it has changed
+                    if (websiteAddress != null) {
+                      updateWebsiteAddress(websiteAddress);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          body: ImageListScreen(websiteAddress: _websiteAddress),
+        ),
+      ),
     );
   }
 }
 
 class ImageListScreen extends StatefulWidget {
+  final String websiteAddress;
+
+  ImageListScreen({required this.websiteAddress});
+
   @override
   _ImageListScreenState createState() => _ImageListScreenState();
 }
@@ -42,7 +105,7 @@ class _ImageListScreenState extends State<ImageListScreen> {
       _isLoading = true;
     });
 
-    final url = Uri.parse('http://localhost:5000/attempts?page=$_currentPage');
+    final url = Uri.parse('http://${widget.websiteAddress}:5000/attempts?page=$_currentPage');
     final response = await http.get(url);
 
     if (response.statusCode == 200) {
@@ -195,11 +258,12 @@ class ImageDetailsScreen extends StatelessWidget {
       body: Column(
         children: [
           Image.network(
-            'http://localhost:5000/image-data?timestamp=${attempt.timestamp}',
+            '${attempt.imageUrl}',
             loadingBuilder: (context, child, progress) {
               if (progress == null) return child;
               return Center(child: CircularProgressIndicator());
             },
+            headers: {'accept': 'image/jpeg'}
           ),
           SizedBox(height: 16),
           Text('Timestamp: ${attempt.timestamp}'),
@@ -212,17 +276,76 @@ class ImageDetailsScreen extends StatelessWidget {
   }
 }
 
+class SettingsPage extends StatefulWidget {
+  final String currentAddress;
+
+  SettingsPage({required this.currentAddress});
+
+  @override
+  _SettingsPageState createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.currentAddress);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void saveSettings() {
+    final newAddress = _controller.text;
+    Navigator.pop(context, newAddress);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Settings'),
+      ),
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextField(
+              controller: _controller,
+              decoration: InputDecoration(
+                labelText: 'Website Address',
+              ),
+            ),
+            SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: saveSettings,
+              child: Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class Attempt {
   final String timestamp;
   final int button;
   final bool response;
   final String person;
+  final String imageUrl;
 
   Attempt({
     required this.timestamp,
     required this.button,
     required this.response,
     required this.person,
+    required this.imageUrl,
   });
 
   factory Attempt.fromJson(Map<String, dynamic> json) {
@@ -231,6 +354,7 @@ class Attempt {
       button: json['button'],
       response: json['response'],
       person: json['person'],
+      imageUrl: 'http://localhost:5000/image-data?timestamp=${json['timestamp']}',
     );
   }
 }
