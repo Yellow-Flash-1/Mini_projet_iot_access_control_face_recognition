@@ -7,17 +7,21 @@ void main() {
   runApp(MyApp());
 }
 
+class GlobalVariables {
+  static String websiteAddress = 'localhost';
+}
+
 class MyApp extends StatefulWidget {
   @override
   _MyAppState createState() => _MyAppState();
 }
 
 class _MyAppState extends State<MyApp> {
-  String _websiteAddress = 'localhost'; // Replace with your website address
+  bool _isDarkTheme = false;
 
   void updateWebsiteAddress(String newAddress) {
     setState(() {
-      _websiteAddress = newAddress;
+      GlobalVariables.websiteAddress = newAddress;
     });
   }
 
@@ -25,13 +29,11 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Image Viewer',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
+      theme: _isDarkTheme ? ThemeData.dark() : ThemeData.light(),
       home: Builder(
         builder: (context) => Scaffold(
           appBar: AppBar(
-            title: Text('Image Viewer'),
+            title: Text('log history'),
           ),
           drawer: Drawer(
             child: ListView(
@@ -53,26 +55,34 @@ class _MyAppState extends State<MyApp> {
                   leading: Icon(Icons.settings),
                   title: Text('Settings'),
                   onTap: () async {
-                    // Navigate to the settings page and get the updated website address
                     final websiteAddress = await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => SettingsPage(
-                          currentAddress: _websiteAddress,
+                          currentAddress: GlobalVariables.websiteAddress,
                         ),
                       ),
                     );
 
-                    // Update the website address if it has changed
                     if (websiteAddress != null) {
                       updateWebsiteAddress(websiteAddress);
                     }
                   },
                 ),
+                ListTile(
+                  leading: Icon(Icons.brightness_medium),
+                  title: Text('Toggle Theme'),
+                  onTap: () {
+                    setState(() {
+                      _isDarkTheme = !_isDarkTheme;
+                    });
+                    Navigator.pop(context); // Close the drawer
+                  },
+                ),
               ],
             ),
           ),
-          body: ImageListScreen(websiteAddress: _websiteAddress),
+          body: ImageListScreen(),
         ),
       ),
     );
@@ -80,10 +90,6 @@ class _MyAppState extends State<MyApp> {
 }
 
 class ImageListScreen extends StatefulWidget {
-  final String websiteAddress;
-
-  ImageListScreen({required this.websiteAddress});
-
   @override
   _ImageListScreenState createState() => _ImageListScreenState();
 }
@@ -91,7 +97,7 @@ class ImageListScreen extends StatefulWidget {
 class _ImageListScreenState extends State<ImageListScreen> {
   List<Attempt> _attempts = [];
   int _currentPage = 1;
-  int _maxPage = 10; // Change this value to the maximum number of pages
+  int _maxPage = 10;
   bool _isLoading = false;
 
   @override
@@ -105,7 +111,8 @@ class _ImageListScreenState extends State<ImageListScreen> {
       _isLoading = true;
     });
 
-    final url = Uri.parse('http://${widget.websiteAddress}:5000/attempts?page=$_currentPage');
+    final url =
+        Uri.parse('http://${GlobalVariables.websiteAddress}:5000/attempts?page=$_currentPage');
     final response = await http.get(url);
 
     if (response.statusCode == 200) {
@@ -214,9 +221,6 @@ class _ImageListScreenState extends State<ImageListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Log'),
-      ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
           : _attempts.isEmpty
@@ -227,7 +231,8 @@ class _ImageListScreenState extends State<ImageListScreen> {
                     final attempt = _attempts[index];
                     return ListTile(
                       title: Text(attempt.timestamp),
-                      subtitle: Text('Button ${attempt.button}, ${attempt.person}, ${attempt.response ? "Allowed" : "Denied"}'),
+                      subtitle:
+                          Text('Button ${attempt.button}, ${attempt.person}, ${attempt.response ? "Allowed" : "Denied"}'),
                       onTap: () {
                         viewImageDetails(attempt);
                       },
@@ -258,12 +263,11 @@ class ImageDetailsScreen extends StatelessWidget {
       body: Column(
         children: [
           Image.network(
-            '${attempt.imageUrl}',
+            'http://${GlobalVariables.websiteAddress}:5000/image-data?name=${attempt.timestamp}_${attempt.button}',
             loadingBuilder: (context, child, progress) {
               if (progress == null) return child;
               return Center(child: CircularProgressIndicator());
             },
-            headers: {'accept': 'image/jpeg'}
           ),
           SizedBox(height: 16),
           Text('Timestamp: ${attempt.timestamp}'),
@@ -295,41 +299,45 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void saveSettings() {
-    final newAddress = _controller.text;
-    Navigator.pop(context, newAddress);
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Settings'),
       ),
       body: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              'Website Address',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
             TextField(
               controller: _controller,
               decoration: InputDecoration(
-                labelText: 'Website Address',
+                border: OutlineInputBorder(),
+                hintText: 'Enter website address',
               ),
             ),
             SizedBox(height: 16),
             ElevatedButton(
-              onPressed: saveSettings,
+              onPressed: () {
+                Navigator.pop(context, _controller.text);
+              },
               child: Text('Save'),
             ),
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 }
 
@@ -338,14 +346,12 @@ class Attempt {
   final int button;
   final bool response;
   final String person;
-  final String imageUrl;
 
   Attempt({
     required this.timestamp,
     required this.button,
     required this.response,
     required this.person,
-    required this.imageUrl,
   });
 
   factory Attempt.fromJson(Map<String, dynamic> json) {
@@ -354,7 +360,6 @@ class Attempt {
       button: json['button'],
       response: json['response'],
       person: json['person'],
-      imageUrl: 'http://localhost:5000/image-data?timestamp=${json['timestamp']}',
     );
   }
 }
