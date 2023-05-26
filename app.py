@@ -2,7 +2,7 @@ import json
 import sqlite3
 import base64
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from datetime import datetime
 from deepface import DeepFace
 from traceback import print_exc
@@ -51,7 +51,7 @@ def recognize_face():
 
     # Save the received image to history folder
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    image_filename = f"{HISTORY_DIR}/{timestamp}_button{button}.jpg"
+    image_filename = f"{HISTORY_DIR}/{timestamp}_{button}.jpg"
     image.save(image_filename)
 
     response = False
@@ -76,41 +76,16 @@ def recognize_face():
     return jsonify({'response': response}), 200
 
 
-# API endpoint to retrieve image data based on timestamp
+# API endpoint to retrieve image data based on name
 @app.route('/image-data', methods=['GET'])
 def get_image_data():
-    timestamp = request.args.get('timestamp')
+    image_filename = request.args.get('name')+".jpg"
+    image_path = os.path.join(HISTORY_DIR, image_filename)
 
-    with get_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+    if not os.path.isfile(image_path):
+        return jsonify({'error': 'Image not found.'}), 404
 
-        # Retrieve image details for the given timestamp
-        query = "SELECT * FROM logs WHERE timestamp >= ? ORDER BY timestamp ASC LIMIT 1"
-        cursor.execute(query, (timestamp,))
-        row = cursor.fetchone()
-
-        if row is None:
-            return jsonify({'error': 'Attempt not found.'}), 404
-
-        image_filename = f"{row['timestamp']}_button{row['button']}.jpg"
-        image_path = os.path.join(HISTORY_DIR, image_filename)
-
-        if not os.path.isfile(image_path):
-            return jsonify({'error': 'Image not found.'}), 404
-
-        with open(image_path, 'rb') as image_file:
-            image_data = base64.b64encode(image_file.read()).decode('utf-8')
-
-        attempt = {
-            'timestamp': row['timestamp'],
-            'button': row['button'],
-            'response': bool(row['response']),
-            'person': row['person'],
-            'image_data': image_data
-        }
-
-    return jsonify(attempt), 200
+    return send_file(image_path, mimetype='image/jpeg')
 
 
 @app.route('/attempts', methods=['GET'])
