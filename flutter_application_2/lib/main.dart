@@ -100,6 +100,9 @@ class _ImageListScreenState extends State<ImageListScreen> {
   int _maxPage = 10;
   bool _isLoading = false;
 
+  final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
+      GlobalKey<RefreshIndicatorState>();
+
   @override
   void initState() {
     super.initState();
@@ -111,8 +114,7 @@ class _ImageListScreenState extends State<ImageListScreen> {
       _isLoading = true;
     });
 
-    final url =
-        Uri.parse('http://${GlobalVariables.websiteAddress}:5000/attempts?page=$_currentPage');
+    final url = Uri.parse('http://${GlobalVariables.websiteAddress}:5000/attempts?page=$_currentPage');
     final response = await http.get(url);
 
     if (response.statusCode == 200) {
@@ -218,27 +220,35 @@ class _ImageListScreenState extends State<ImageListScreen> {
     return pageNumbers;
   }
 
+  Future<void> _handleRefresh() async {
+    await fetchAttempts();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator())
-          : _attempts.isEmpty
-              ? Center(child: Text('No attempts found.'))
-              : ListView.builder(
-                  itemCount: _attempts.length,
-                  itemBuilder: (ctx, index) {
-                    final attempt = _attempts[index];
-                    return ListTile(
-                      title: Text(attempt.timestamp),
-                      subtitle:
-                          Text('Button ${attempt.button}, ${attempt.person}, ${attempt.response ? "Allowed" : "Denied"}'),
-                      onTap: () {
-                        viewImageDetails(attempt);
-                      },
-                    );
-                  },
-                ),
+      body: RefreshIndicator(
+        key: _refreshIndicatorKey,
+        onRefresh: _handleRefresh,
+        child: _isLoading
+            ? Center(child: CircularProgressIndicator())
+            : _attempts.isEmpty
+                ? Center(child: Text('No attempts found.'))
+                : ListView.builder(
+                    itemCount: _attempts.length,
+                    itemBuilder: (ctx, index) {
+                      final attempt = _attempts[index];
+                      return ListTile(
+                        title: Text(attempt.timestamp),
+                        subtitle: Text(
+                            'Button ${attempt.button}, ${attempt.person}, ${attempt.response ? "Allowed" : "Denied"}'),
+                        onTap: () {
+                          viewImageDetails(attempt);
+                        },
+                      );
+                    },
+                  ),
+      ),
       bottomNavigationBar: BottomAppBar(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -262,12 +272,19 @@ class ImageDetailsScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
-          Image.network(
-            'http://${GlobalVariables.websiteAddress}:5000/image-data?name=${attempt.timestamp}_${attempt.button}',
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return Center(child: CircularProgressIndicator());
-            },
+          Center(
+            child: Container(
+              constraints: BoxConstraints(
+                maxHeight: 500, // maximum height for the image
+              ),
+              child: Image.network(
+                'http://${GlobalVariables.websiteAddress}:5000/image-data?name=${attempt.timestamp}_${attempt.button}',
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return Center(child: CircularProgressIndicator());
+                },
+              ),
+            ),
           ),
           SizedBox(height: 16),
           Text('Timestamp: ${attempt.timestamp}'),
@@ -275,7 +292,8 @@ class ImageDetailsScreen extends StatelessWidget {
           Text('Response: ${attempt.response ? "Allowed" : "Denied"}'),
           Text('Person: ${attempt.person}'),
         ],
-      ),
+      )
+
     );
   }
 }
